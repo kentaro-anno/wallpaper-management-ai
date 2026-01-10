@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+build/
+dist/
+*.egg-info/
+.pytest_cache/
+season_classifier.log
+
+# Node.js
+node_modules/
+frontend/dist/
+frontend/.vite/
+.eslintcache
+
+# OS / IDE
+.vscode/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Project Data (Excluding image samples/data)
+Bing/
+Windows Spotlight/
+ロウソク/
+宇宙/
+植物/
+風景/
+mv_wallpaper.exe
+
+# Environment
+.env
+.python-version

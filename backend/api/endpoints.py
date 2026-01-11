@@ -13,8 +13,8 @@ duplicate_service = DuplicateService()
 classify_service = ClassifyService()
 settings_service = SettingsService()
 
-# 壁紙フォルダのデフォルトパス
-DEFAULT_FOLDER = r"[PRIVATE_PATH]"
+# 壁紙フォルダのデフォルトパス（環境変数から読み込み、未設定なら空文字）
+DEFAULT_FOLDER = os.getenv("WALLPAPER_TARGET_FOLDER", "")
 
 class ScanRequest(BaseModel):
     folder: str = DEFAULT_FOLDER

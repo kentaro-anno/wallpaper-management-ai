@@ -1,6 +1,11 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from dotenv import load_dotenv
+import os
 from .api import endpoints
+
+# 環境変数の読み込み
+load_dotenv()
 
 app = FastAPI(title="Wallpaper Management API")
 

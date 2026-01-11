@@ -20,6 +20,7 @@ class ScanRequest(BaseModel):
     folder: str = DEFAULT_FOLDER
     threshold: float = 0.5
     metric: str = "probability"  # "probability", "margin", "entropy"
+    workers: int = 4
 
 class ExecuteRequest(BaseModel):
     results: List[Dict]
@@ -33,6 +34,14 @@ class DeleteRequest(BaseModel):
 @router.get("/status")
 async def get_status():
     return {"status": "ok", "folder": DEFAULT_FOLDER}
+
+@router.get("/system/info")
+async def get_system_info():
+    """システム情報を取得する（CPUコア数など）"""
+    return {
+        "cpu_count": os.cpu_count(),
+        "device": "cuda" if classify_service.device == "cuda" else "cpu"
+    }
 
 @router.get("/images/preview")
 async def preview_image(path: str):
@@ -63,7 +72,7 @@ async def browse_folder(initial_dir: str = DEFAULT_FOLDER):
 @router.post("/duplicates/scan")
 async def scan_duplicates(request: ScanRequest):
     try:
-        duplicates = await duplicate_service.find_similar_images(request.folder)
+        duplicates = await duplicate_service.find_similar_images(request.folder, request.workers)
         return {"duplicates": duplicates}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -88,34 +97,39 @@ async def scan_seasons(request: ScanRequest):
         print(f"Model load error: {e}")
         raise HTTPException(status_code=500, detail=f"Model load failed: {str(e)}")
     
-    targets = filenames[:50]
-    print(f"Starting classification for {len(targets)} images (Metric: {request.metric}, Threshold: {request.threshold})...")
+    targets = filenames # 制限を解除 (全件処理)
+    print(f"Starting classification for {len(targets)} images (Metric: {request.metric}, Threshold: {request.threshold}, Workers: {request.workers})...")
     
     import asyncio
     loop = asyncio.get_event_loop()
     
-    for i, filename in enumerate(targets):
-        path = os.path.join(request.folder, filename)
-        result = await loop.run_in_executor(None, classify_service.analyze_image_sync, path)
-        if result:
-            u = result['uncertainty']
-            # メトリックに応じて判定
-            is_unknown = False
-            if request.metric == "probability":
-                # 自信の最大値が閾値以下なら Unknown
-                max_prob = max(result['probs'].values())
-                is_unknown = max_prob < request.threshold
-            elif request.metric == "margin":
-                # 1位と2位の差が閾値以下なら Unknown
-                is_unknown = u['margin_confidence'] < request.threshold
-            elif request.metric == "entropy":
-                # エントロピー（迷い度）が閾値以上なら Unknown
-                is_unknown = u['entropy'] > request.threshold
-                
-            result['is_unknown'] = is_unknown
-            results.append(result)
+    async def process_batch(paths):
+        tasks = [loop.run_in_executor(None, classify_service.analyze_image_sync, p) for p in paths]
+        return await asyncio.gather(*tasks)
+
+    # バッチサイズをワーカー数に合わせる
+    batch_size = request.workers
+    for i in range(0, len(targets), batch_size):
+        batch_filenames = targets[i:i + batch_size]
+        batch_paths = [os.path.join(request.folder, f) for f in batch_filenames]
+        batch_results = await process_batch(batch_paths)
+        
+        for result in batch_results:
+            if result:
+                u = result['uncertainty']
+                is_unknown = False
+                if request.metric == "probability":
+                    max_prob = max(result['probs'].values())
+                    is_unknown = max_prob < request.threshold
+                elif request.metric == "margin":
+                    is_unknown = u['margin_confidence'] < request.threshold
+                elif request.metric == "entropy":
+                    is_unknown = u['entropy'] > request.threshold
+                    
+                result['is_unknown'] = is_unknown
+                results.append(result)
             
-    return {"results": results, "total_processed": len(results), "skipped": len(filenames) - len(targets)}
+    return {"results": results, "total_processed": len(results), "skipped": len(filenames) - len(results)}
 
 @router.post("/classify/execute")
 async def execute_classification(request: ExecuteRequest):

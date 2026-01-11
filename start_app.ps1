@@ -21,7 +21,15 @@ Write-Host "NOTE: Press Ctrl+C once to stop everything." -ForegroundColor Gray
 
 # Start Backend
 Write-Host "Starting backend..." -ForegroundColor Gray
-$backend = Start-Process python -ArgumentList "-m uvicorn backend.main:app --host 0.0.0.0 --port 8000" -NoNewWindow -PassThru
+$backend = Start-Process python -ArgumentList "-m uvicorn backend.main:app --host 0.0.0.0 --port 8000 --log-level warning" -NoNewWindow -PassThru
+
+# Wait a moment and check if backend is still running
+Start-Sleep -Seconds 2
+if ($backend.HasExited) {
+    Write-Host "ERROR: Backend failed to start. Check if .env is set or port 8000 is in use." -ForegroundColor Red
+    Stop-All
+    exit 1
+}
 
 # Start Frontend
 Write-Host "Starting frontend..." -ForegroundColor Gray
@@ -33,8 +41,7 @@ cd ..
 Write-Host "`nWaiting for servers to initialize..." -ForegroundColor Gray
 Start-Sleep -Seconds 5
 
-# Explicitly open browser just in case
-Start-Process "http://localhost:5173"
+# Start-Process "http://localhost:5173"
 
 try {
     # Keep the script alive while processes are running

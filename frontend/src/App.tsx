@@ -2,16 +2,18 @@ import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import axios from 'axios';
 import {
-    LayoutDashboard,
+    Home,
     Copy,
     CloudSun,
     Settings,
     ChevronRight,
     Image as ImageIcon,
     CheckCircle2,
-    RefreshCw,
     FolderOpen,
-    X
+    X,
+    Cpu,
+    AlertCircle,
+    Info
 } from 'lucide-react';
 
 const API_BASE = 'http://localhost:8000';
@@ -43,8 +45,7 @@ const GlassCard = ({ children, className = "", onClick }: any) => (
 // --- Main App ---
 
 export default function App() {
-    const [activeTab, setActiveTab] = useState('dashboard');
-    const [stats, setStats] = useState({ total_images: 0, duplicates: 0, classified: 0 });
+    const [activeTab, setActiveTab] = useState('home');
     const [scanning, setScanning] = useState(false);
     const [progress, setProgress] = useState(0);
     const [targetFolder, setTargetFolder] = useState(() => {
@@ -61,6 +62,9 @@ export default function App() {
     const [classificationResults, setClassificationResults] = useState<any[]>([]);
     const [threshold, setThreshold] = useState(0.5);
     const [metric, setMetric] = useState('probability'); // probability, margin, entropy
+    const [workers, setWorkers] = useState(4);
+    const [maxCores, setMaxCores] = useState(4);
+    const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error' | 'info', text: string } | null>(null);
 
     // フォルダパスが変更されたら保存
     useEffect(() => {
@@ -69,22 +73,43 @@ export default function App() {
         localStorage.setItem('useCustomOutput', String(useCustomOutput));
     }, [targetFolder, outputFolder, useCustomOutput]);
 
-    const fetchStats = async () => {
+    useEffect(() => {
+        fetchSystemInfo();
+    }, [targetFolder]);
+
+    const fetchSystemInfo = async () => {
         try {
-            const res = await axios.get(`${API_BASE}/api/stats?folder=${encodeURIComponent(targetFolder)}`);
-            setStats(res.data);
+            const res = await axios.get(`${API_BASE}/api/system/info`);
+            setMaxCores(res.data.cpu_count);
+            // 推論として CPUコア数の 75% をデフォルトに設定（既保存がなければ）
+            if (!localStorage.getItem('workers')) {
+                setWorkers(Math.max(1, Math.floor(res.data.cpu_count * 0.75)));
+            }
         } catch (error) {
-            console.error('Failed to fetch stats:', error);
+            console.error('Failed to fetch system info:', error);
         }
     };
 
     useEffect(() => {
-        fetchStats();
-        const timer = setInterval(fetchStats, 10000);
-        return () => clearInterval(timer);
+        fetchSystemInfo();
+        // Removed fetchStats and its interval
     }, [targetFolder]);
 
+    useEffect(() => {
+        const savedWorkers = localStorage.getItem('workers');
+        if (savedWorkers) setWorkers(parseInt(savedWorkers));
+    }, []);
+
+    useEffect(() => {
+        localStorage.setItem('workers', String(workers));
+    }, [workers]);
+
+    const showMessage = (type: 'success' | 'error' | 'info', text: string) => {
+        setStatusMessage({ type, text });
+    };
+
     const runDuplicateScan = async () => {
+        setStatusMessage(null);
         setScanning(true);
         setProgress(0);
         try {
@@ -92,7 +117,10 @@ export default function App() {
                 setProgress(prev => Math.min(prev + 5, 95));
             }, 500);
 
-            const res = await axios.post(`${API_BASE}/api/duplicates/scan`, { folder: targetFolder });
+            const res = await axios.post(`${API_BASE}/api/duplicates/scan`, {
+                folder: targetFolder,
+                workers: workers
+            });
 
             clearInterval(progressTimer);
             setProgress(100);
@@ -102,19 +130,19 @@ export default function App() {
             if (res.data.duplicates && res.data.duplicates.length > 0) {
                 setDuplicatePairs(res.data.duplicates);
                 setCurrentPairIndex(0);
-                alert(`${res.data.duplicates.length} 個の重複ペアが見つかりました。`);
+                showMessage('success', `${res.data.duplicates.length} 個の重複ペアが見つかりました。`);
             } else {
-                alert(`重複は見つかりませんでした。`);
-                fetchStats();
+                showMessage('info', `重複は見つかりませんでした。`);
             }
         } catch (error) {
-            alert('スキャン中にエラーが発生しました。');
+            showMessage('error', 'スキャン中にエラーが発生しました。');
         } finally {
             setScanning(false);
         }
     };
 
     const runSeasonClassification = async () => {
+        setStatusMessage(null);
         setScanning(true);
         setProgress(0);
         setClassificationResults([]);
@@ -126,7 +154,8 @@ export default function App() {
             const res = await axios.post(`${API_BASE}/api/classify/scan`, {
                 folder: targetFolder,
                 threshold: threshold,
-                metric: metric
+                metric: metric,
+                workers: workers
             }, { timeout: 600000 });
 
             clearInterval(progressTimer);
@@ -136,14 +165,13 @@ export default function App() {
 
             if (res.data.results && res.data.results.length > 0) {
                 setClassificationResults(res.data.results);
-                alert(`AI 季節分類が完了しました。\n${res.data.total_processed} 枚の画像を解析しました。`);
+                showMessage('success', `AI 季節分類が完了しました。${res.data.total_processed} 枚の画像を解析しました。`);
             } else {
-                alert(`解析対象の画像が見つからないか、処理がスキップされました。`);
+                showMessage('info', `解析対象の画像が見つからないか、処理がスキップされました。`);
             }
-            fetchStats();
         } catch (error: any) {
             const detail = error.response?.data?.detail || error.message;
-            alert(`分類中にエラーが発生しました:\n${detail}`);
+            showMessage('error', `分類中にエラーが発生しました: ${detail}`);
         } finally {
             setScanning(false);
         }
@@ -154,6 +182,7 @@ export default function App() {
         const confirmMsg = `${classificationResults.length} 枚のファイルを整理して${mode === 'move' ? '移動' : 'コピー'}しますか？`;
         if (!window.confirm(confirmMsg)) return;
 
+        setStatusMessage(null);
         setScanning(true);
         try {
             const res = await axios.post(`${API_BASE}/api/classify/execute`, {
@@ -162,11 +191,10 @@ export default function App() {
                 folder: targetFolder,
                 output_folder: useCustomOutput ? outputFolder : targetFolder
             });
-            alert(res.data.message);
+            showMessage('success', res.data.message);
             setClassificationResults([]);
-            fetchStats();
         } catch (error) {
-            alert('実行中にエラーが発生しました。');
+            showMessage('error', '実行中にエラーが発生しました。');
         } finally {
             setScanning(false);
         }
@@ -179,7 +207,7 @@ export default function App() {
                 setTargetFolder(res.data.path);
             }
         } catch (error) {
-            alert('フォルダ選択ダイアログを開けませんでした。');
+            showMessage('error', 'フォルダ選択ダイアログを開けませんでした。');
         }
     };
 
@@ -191,7 +219,7 @@ export default function App() {
                 setUseCustomOutput(true);
             }
         } catch (error) {
-            alert('フォルダ選択ダイアログを開けませんでした。');
+            showMessage('error', 'フォルダ選択ダイアログを開けませんでした。');
         }
     };
 
@@ -202,7 +230,7 @@ export default function App() {
             await axios.post(`${API_BASE}/api/duplicates/delete`, { path: pathToDelete });
             handleNextPair();
         } catch (error) {
-            alert('削除に失敗しました。');
+            showMessage('error', '削除に失敗しました。');
         }
     };
 
@@ -212,8 +240,7 @@ export default function App() {
         } else {
             setCurrentPairIndex(-1);
             setDuplicatePairs([]);
-            fetchStats();
-            alert('完了しました。');
+            showMessage('success', '全ての重複処理が完了しました。');
         }
     };
 
@@ -253,7 +280,7 @@ export default function App() {
                 </div>
 
                 <nav className="flex-1 space-y-3">
-                    <SidebarItem icon={LayoutDashboard} label="ダッシュボード" active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} />
+                    <SidebarItem icon={Home} label="ホーム" active={activeTab === 'home'} onClick={() => setActiveTab('home')} />
                     <SidebarItem icon={Copy} label="重複削除" active={activeTab === 'duplicates'} onClick={() => setActiveTab('duplicates')} />
                     <SidebarItem icon={CloudSun} label="季節分類" active={activeTab === 'seasons'} onClick={() => setActiveTab('seasons')} />
                 </nav>
@@ -263,56 +290,59 @@ export default function App() {
                 </div>
             </aside>
 
+            {/* Status Messages */}
+            <AnimatePresence>
+                {statusMessage && (
+                    <motion.div
+                        initial={{ opacity: 0, y: -20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, scale: 0.95 }}
+                        className={`fixed top-8 left-1/2 -translate-x-1/2 z-[100] px-6 py-4 rounded-2xl shadow-2xl backdrop-blur-xl border flex items-center space-x-3 
+                            ${statusMessage.type === 'success' ? 'bg-emerald-500/20 border-emerald-500/30 text-emerald-400' :
+                                statusMessage.type === 'error' ? 'bg-red-500/20 border-red-500/30 text-red-400' :
+                                    'bg-primary/20 border-primary/30 text-primary'}`}
+                    >
+                        {statusMessage.type === 'success' ? <CheckCircle2 size={20} /> :
+                            statusMessage.type === 'error' ? <AlertCircle size={20} /> : <Info size={20} />}
+                        <span className="font-bold pr-2">{statusMessage.text}</span>
+                        <button
+                            onClick={() => setStatusMessage(null)}
+                            className="p-1 hover:bg-white/10 rounded-full transition-colors ml-2 border-l border-white/10 pl-3"
+                        >
+                            <X size={16} />
+                        </button>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
             {/* Main Content */}
             <main className="flex-1 overflow-y-auto z-10 p-12">
                 <AnimatePresence mode="wait">
-                    {activeTab === 'dashboard' && (
-                        <motion.div key="dashboard" initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -30 }} className="max-w-6xl mx-auto space-y-12">
-                            <div className="flex justify-between items-end">
-                                <div>
-                                    <h2 className="text-5xl font-black mb-4 bg-clip-text text-transparent bg-gradient-to-r from-white to-white/40">Overview</h2>
-                                    <p className="text-muted-foreground text-xl">壁紙コレクションのステータスを確認しましょう。</p>
-                                </div>
-                                <button onClick={fetchStats} className="p-3 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 transition-colors">
-                                    <RefreshCw className="text-white/60" size={20} />
-                                </button>
-                            </div>
-
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                                {[
-                                    { label: '総画像数', value: stats.total_images.toLocaleString(), icon: ImageIcon, color: 'primary' },
-                                    { label: '重複の疑い', value: stats.duplicates, icon: Copy, color: 'purple-500' },
-                                    { label: '分類済み', value: `${stats.classified}%`, icon: CheckCircle2, color: 'emerald-500' },
-                                ].map((stat, i) => (
-                                    <GlassCard key={i} className="flex items-center space-x-6 p-8">
-                                        <div className="p-5 rounded-2xl bg-white/5 text-primary">
-                                            <stat.icon size={32} />
-                                        </div>
-                                        <div>
-                                            <p className="text-muted-foreground font-medium mb-1">{stat.label}</p>
-                                            <p className="text-4xl font-bold tracking-tight">{stat.value}</p>
-                                        </div>
-                                    </GlassCard>
-                                ))}
-                            </div>
-
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-10 mt-16">
-                                <GlassCard onClick={() => setActiveTab('duplicates')} className="min-h-[300px] flex flex-col justify-end group cursor-pointer hover:border-primary/50">
-                                    <div className="absolute top-0 right-0 p-12 text-white/5 group-hover:text-primary/10 transition-all duration-700">
-                                        <Copy size={180} />
+                    {activeTab === 'home' && (
+                        <motion.div key="home" initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -30 }} className="max-w-6xl mx-auto space-y-12 h-full flex flex-col justify-center pb-24">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-10 max-w-5xl mx-auto w-full">
+                                <GlassCard onClick={() => setActiveTab('duplicates')} className="min-h-[350px] flex flex-col justify-end group cursor-pointer hover:border-primary/50 relative overflow-hidden">
+                                    <div className="absolute top-[-20px] right-[-20px] p-8 text-white/5 group-hover:text-primary/10 transition-all duration-700">
+                                        <Copy size={240} />
                                     </div>
                                     <div className="relative z-10">
-                                        <h3 className="text-3xl font-bold mb-4 flex items-center">Duplicate Scan <ChevronRight className="ml-3 group-hover:translate-x-2 transition-transform" /></h3>
-                                        <p className="text-muted-foreground text-lg">視覚的に似ている画像を特定し、整理します。</p>
+                                        <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center text-primary mb-6 group-hover:scale-110 transition-transform">
+                                            <Copy size={24} />
+                                        </div>
+                                        <h3 className="text-4xl font-black mb-4 flex items-center">Duplicate Finder <ChevronRight className="ml-3 group-hover:translate-x-2 transition-transform text-primary" /></h3>
+                                        <p className="text-muted-foreground text-lg leading-relaxed max-w-sm">視覚的に似ている画像を特定し、無駄なストレージ消費を抑えます。</p>
                                     </div>
                                 </GlassCard>
-                                <GlassCard onClick={() => setActiveTab('seasons')} className="min-h-[300px] flex flex-col justify-end group cursor-pointer hover:border-purple-500/50">
-                                    <div className="absolute top-0 right-0 p-12 text-white/5 group-hover:text-purple-500/10 transition-all duration-700">
-                                        <CloudSun size={180} />
+                                <GlassCard onClick={() => setActiveTab('seasons')} className="min-h-[350px] flex flex-col justify-end group cursor-pointer hover:border-purple-500/50 relative overflow-hidden">
+                                    <div className="absolute top-[-20px] right-[-20px] p-8 text-white/5 group-hover:text-purple-500/10 transition-all duration-700">
+                                        <CloudSun size={240} />
                                     </div>
                                     <div className="relative z-10">
-                                        <h3 className="text-3xl font-bold mb-4 flex items-center">AI Classification <ChevronRight className="ml-3 group-hover:translate-x-2 transition-transform" /></h3>
-                                        <p className="text-muted-foreground text-lg">AI モデルを活用して風景を四季に自動分類します。</p>
+                                        <div className="w-12 h-12 rounded-xl bg-purple-500/10 flex items-center justify-center text-purple-500 mb-6 group-hover:scale-110 transition-transform">
+                                            <CloudSun size={24} />
+                                        </div>
+                                        <h3 className="text-4xl font-black mb-4 flex items-center">AI Season Classifier <ChevronRight className="ml-3 group-hover:translate-x-2 transition-transform text-purple-500" /></h3>
+                                        <p className="text-muted-foreground text-lg leading-relaxed max-w-sm">AI モデルを活用して風景を四季に自動分類。壁紙ライブラリを整理します。</p>
                                     </div>
                                 </GlassCard>
                             </div>
@@ -530,7 +560,28 @@ export default function App() {
                                         </div>
                                     )}
                                 </div>
+
+                                <div className="space-y-4 pt-6 border-t border-white/5">
+                                    <div className="flex justify-between items-center text-sm font-bold text-white/50">
+                                        <div className="flex items-center"><Cpu size={16} className="mr-2 text-primary" /> 並列作業数 (Workers)</div>
+                                        <div className="text-primary">{workers} <span className="text-[10px] text-white/30 ml-1">/ {maxCores}</span></div>
+                                    </div>
+                                    <input
+                                        type="range"
+                                        min="1"
+                                        max={maxCores}
+                                        value={workers}
+                                        onChange={(e) => setWorkers(parseInt(e.target.value))}
+                                        className="w-full accent-primary h-1.5 bg-white/5 rounded-lg appearance-none cursor-pointer"
+                                    />
+                                    <div className="text-[10px] text-white/30 flex justify-between">
+                                        <span>最小負荷 (1)</span>
+                                        <span className="text-primary/60">推奨: {Math.max(1, Math.floor(maxCores * 0.75))}</span>
+                                        <span>最大負荷 ({maxCores})</span>
+                                    </div>
+                                </div>
                             </GlassCard>
+
                             <GlassCard className="grid grid-cols-2 gap-8">
                                 <div className="space-y-2">
                                     <h4 className="text-xs font-bold text-white/40 uppercase">CLIP Model</h4>

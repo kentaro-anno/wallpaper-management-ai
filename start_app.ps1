@@ -21,7 +21,7 @@ Write-Host "NOTE: Press Ctrl+C once to stop everything." -ForegroundColor Gray
 
 # Start Backend
 Write-Host "Starting backend..." -ForegroundColor Gray
-$backend = Start-Process python -ArgumentList "-m uvicorn backend.main:app --host 0.0.0.0 --port 8000 --log-level warning" -NoNewWindow -PassThru
+$backend = Start-Process python -ArgumentList "-m uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload --log-level warning" -NoNewWindow -PassThru
 
 # Wait a moment and check if backend is still running
 Start-Sleep -Seconds 2

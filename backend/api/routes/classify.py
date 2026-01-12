@@ -5,6 +5,7 @@ from typing import List, Dict, Optional
 import os
 import shutil
 import asyncio
+from pathlib import Path
 from ...services.classify_service import ClassifyService
 
 router = APIRouter()
@@ -28,7 +29,7 @@ class ExecuteRequest(BaseModel):
 async def preview_image(path: str):
     """画像をプレビュー用に配信する"""
     if not os.path.exists(path):
-        raise HTTPException(status_code=404, detail="File not found")
+        raise HTTPException(status_code=404, detail=f"File not found: {path}")
     return FileResponse(path)
 
 @router.post("/scan")
@@ -69,6 +70,7 @@ async def scan_seasons(request: ScanRequest):
                 elif request.metric == "entropy":
                     is_unknown = u['entropy'] > request.threshold
                     
+                result['path'] = Path(result['path']).absolute().as_posix()
                 result['is_unknown'] = is_unknown
                 results.append(result)
             

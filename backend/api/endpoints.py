@@ -9,4 +9,4 @@ router.include_router(classify.router, prefix="/classify", tags=["classify"])
 router.include_router(settings.router, prefix="/settings", tags=["settings"])
 
 # Backward compatibility or common image utility
-router.include_router(classify.router, tags=["images"]) # For /images/preview
+router.include_router(classify.router, prefix="/images", tags=["images"]) # For /api/images/preview

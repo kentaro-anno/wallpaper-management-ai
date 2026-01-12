@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { Copy, X } from 'lucide-react';
+import { Copy, X, CheckCircle2 } from 'lucide-react';
 import { API_BASE } from '../../constants';
 
 interface DuplicateFinderProps {
@@ -26,6 +26,9 @@ export const DuplicateFinder = ({
     onNextPair,
     onResetIndex
 }: DuplicateFinderProps) => {
+    // スキャン完了後（duplicatePairsがある）かつ、まだ確認を開始していない（indexが-1）状態
+    const isScanFinished = !scanning && duplicatePairs.length > 0 && currentPairIndex === -1;
+
     return (
         <motion.div
             key="duplicates"
@@ -39,21 +42,54 @@ export const DuplicateFinder = ({
                 <div className="glass-card p-16 rounded-[3rem] space-y-10 border border-white/5">
                     {!scanning ? (
                         currentPairIndex === -1 ? (
-                            <>
-                                <div className="w-24 h-24 rounded-full bg-primary/10 flex items-center justify-center text-primary mx-auto">
-                                    <Copy size={48} />
-                                </div>
+                            <div className="space-y-10">
+                                {isScanFinished ? (
+                                    <div className="w-24 h-24 rounded-full bg-emerald-500/10 flex items-center justify-center text-emerald-400 mx-auto">
+                                        <CheckCircle2 size={48} />
+                                    </div>
+                                ) : (
+                                    <div className="w-24 h-24 rounded-full bg-primary/10 flex items-center justify-center text-primary mx-auto">
+                                        <Copy size={48} />
+                                    </div>
+                                )}
+
                                 <div className="space-y-4">
-                                    <h3 className="text-2xl font-bold">スキャン準備完了</h3>
-                                    <p className="text-muted-foreground">対象: {targetFolder}</p>
+                                    <h3 className="text-2xl font-bold">
+                                        {isScanFinished ? 'スキャン完了' : 'スキャン準備完了'}
+                                    </h3>
+                                    <p className="text-muted-foreground">
+                                        {isScanFinished
+                                            ? `${duplicatePairs.length} 個の重複ペアが見つかりました。`
+                                            : `対象: ${targetFolder}`}
+                                    </p>
                                 </div>
-                                <button
-                                    onClick={onRunScan}
-                                    className="px-12 py-5 bg-gradient-to-r from-primary to-purple-600 rounded-[2rem] font-black text-lg shadow-xl shadow-primary/20 hover:scale-105 transition-all"
-                                >
-                                    スキャン開始
-                                </button>
-                            </>
+
+                                <div className="flex flex-col items-center space-y-4">
+                                    {isScanFinished ? (
+                                        <>
+                                            <button
+                                                onClick={() => onNextPair()} // Start verification by going to index 0
+                                                className="px-12 py-5 bg-gradient-to-r from-emerald-600 to-teal-500 rounded-[2rem] font-black text-lg shadow-xl shadow-emerald-500/20 hover:scale-105 transition-all w-full max-w-xs"
+                                            >
+                                                重複を確認する
+                                            </button>
+                                            <button
+                                                onClick={onRunScan}
+                                                className="text-sm text-white/40 hover:text-white transition-colors"
+                                            >
+                                                再スキャンする
+                                            </button>
+                                        </>
+                                    ) : (
+                                        <button
+                                            onClick={onRunScan}
+                                            className="px-12 py-5 bg-gradient-to-r from-primary to-purple-600 rounded-[2rem] font-black text-lg shadow-xl shadow-primary/20 hover:scale-105 transition-all w-full max-w-xs"
+                                        >
+                                            スキャン開始
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
                         ) : (
                             <div className="space-y-8 w-full text-left">
                                 <div className="flex justify-between items-center bg-white/5 p-4 rounded-2xl">

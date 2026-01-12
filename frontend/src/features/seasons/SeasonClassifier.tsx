@@ -154,7 +154,7 @@ export const SeasonClassifier = ({
                                                                 {(() => {
                                                                     const lastWord = r.prediction.split(' ').pop();
                                                                     const capitalized = lastWord.charAt(0).toUpperCase() + lastWord.slice(1);
-                                                                    const prob = r.probs[capitalized] || r.probs[lastWord] || 0;
+                                                                    const prob = r.probs?.[capitalized] || r.probs?.[lastWord] || 0;
                                                                     return Math.round(prob * 100);
                                                                 })()}%
                                                             </span>

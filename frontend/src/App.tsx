@@ -69,6 +69,10 @@ export default function App() {
         }
     };
 
+    useEffect(() => {
+        setStatusMessage(null);
+    }, [activeTab]);
+
     const showMessage = (type: 'success' | 'error' | 'info', text: string) => {
         setStatusMessage({ type, text });
     };
@@ -95,8 +99,7 @@ export default function App() {
 
             if (res.data.duplicates && res.data.duplicates.length > 0) {
                 setDuplicatePairs(res.data.duplicates);
-                setCurrentPairIndex(0);
-                showMessage('success', `${res.data.duplicates.length} 個の重複ペアが見つかりました。`);
+                setCurrentPairIndex(-1); // Show result screen first
             } else {
                 showMessage('info', `重複は見つかりませんでした。`);
             }
@@ -130,7 +133,6 @@ export default function App() {
 
             if (res.data.results && res.data.results.length > 0) {
                 setClassificationResults(res.data.results);
-                showMessage('success', `AI 季節分類が完了しました。${res.data.total_processed} 枚の画像を解析しました。`);
             } else {
                 showMessage('info', `解析対象の画像が見つからないか、処理がスキップされました。`);
             }

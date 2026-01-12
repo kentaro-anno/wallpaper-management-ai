@@ -1,5 +1,6 @@
 import os
 import imagehash
+from pathlib import Path
 from PIL import Image
 from typing import List, Tuple, Dict
 import logging
@@ -20,8 +21,8 @@ class DuplicateService:
         filenames = [f for f in os.listdir(folder) if f.lower().endswith((".png", ".jpg", ".jpeg", ".bmp"))]
         
         def process_image(filename):
-            full_path = os.path.join(folder, filename)
             try:
+                full_path = Path(os.path.join(folder, filename)).absolute().as_posix()
                 with Image.open(full_path) as img:
                     img_hash = imagehash.phash(img)
                     return (img_hash, full_path)

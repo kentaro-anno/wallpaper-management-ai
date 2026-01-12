@@ -7,5 +7,5 @@ if exist .venv\Scripts\activate.bat (
     call .venv\Scripts\activate.bat
 )
 
-:: Delegate to PowerShell for better process management
-powershell -ExecutionPolicy Bypass -File start_app.ps1
+:: Delegate to PowerShell
+powershell -ExecutionPolicy Bypass -File "%~dp0start_app.ps1"

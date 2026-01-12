@@ -33,18 +33,24 @@ class DuplicateService:
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             results = list(executor.map(process_image, filenames))
 
+        # Group by hash
         for result in results:
             if result:
                 img_hash, full_path = result
-                if img_hash in hash_dict:
-                    duplicates.append({
-                        "left": hash_dict[img_hash],
-                        "right": full_path,
-                        "left_name": os.path.basename(hash_dict[img_hash]),
-                        "right_name": os.path.basename(full_path)
-                    })
-                else:
-                    hash_dict[img_hash] = full_path
+                if img_hash not in hash_dict:
+                    hash_dict[img_hash] = []
+                hash_dict[img_hash].append({
+                    "path": full_path,
+                    "name": os.path.basename(full_path)
+                })
+        
+        # Filter for duplicates (groups with > 1 image)
+        for img_hash, images in hash_dict.items():
+            if len(images) > 1:
+                duplicates.append({
+                    "hash": str(img_hash),
+                    "images": images
+                })
                 
         return duplicates
 

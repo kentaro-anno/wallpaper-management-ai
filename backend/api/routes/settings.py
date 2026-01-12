@@ -1,11 +1,23 @@
 from fastapi import APIRouter
 import os
+from pydantic import BaseModel
 from ...services.settings_service import SettingsService
 
 router = APIRouter()
 settings_service = SettingsService()
 
 DEFAULT_FOLDER = os.getenv("WALLPAPER_TARGET_FOLDER", "")
+
+class SaveSettingsRequest(BaseModel):
+    target_folder: str
+    workers: int
+
+@router.post("/save")
+async def save_settings(request: SaveSettingsRequest):
+    """設定を保存する"""
+    settings_service.update_env_variable("WALLPAPER_TARGET_FOLDER", request.target_folder)
+    settings_service.update_env_variable("WALLPAPER_WORKERS", str(request.workers))
+    return {"message": "Settings saved successfully"}
 
 @router.get("/browse")
 async def browse_folder(initial_dir: str = DEFAULT_FOLDER):

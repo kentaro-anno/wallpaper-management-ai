@@ -31,13 +31,12 @@ export default function App() {
     const [targetFolder, setTargetFolder] = useState(() => localStorage.getItem('targetFolder') || '');
     const [outputFolder, setOutputFolder] = useState(() => localStorage.getItem('outputFolder') || '');
     const [useCustomOutput, setUseCustomOutput] = useState(() => localStorage.getItem('useCustomOutput') === 'true');
-    const [workers, setWorkers] = useState(() => parseInt(localStorage.getItem('workers') || '4'));
+    const [workers, setWorkers] = useState(4); // Default, will be updated by fetchSystemInfo
     const [maxCores, setMaxCores] = useState(4);
     const [deviceInfo, setDeviceInfo] = useState('CPU');
 
     // Duplicate State
-    const [duplicatePairs, setDuplicatePairs] = useState<any[]>([]);
-    const [currentPairIndex, setCurrentPairIndex] = useState(-1);
+    const [duplicateGroups, setDuplicateGroups] = useState<any[]>([]);
 
     // Season State
     const [classificationResults, setClassificationResults] = useState<any[]>([]);
@@ -59,11 +58,9 @@ export default function App() {
     const fetchSystemInfo = async () => {
         try {
             const res = await axios.get(`${API_BASE}/api/system/info`);
-            setMaxCores(res.data.cpu_count);
-            setDeviceInfo(res.data.device.toUpperCase());
-            if (!localStorage.getItem('workers')) {
-                setWorkers(Math.max(1, Math.floor(res.data.cpu_count * 0.75)));
-            }
+            setMaxCores(res.data.cpu_cores);
+            setDeviceInfo(res.data.device);
+            if (res.data.workers) setWorkers(res.data.workers);
         } catch (error) {
             console.error('Failed to fetch system info:', error);
         }
@@ -98,8 +95,7 @@ export default function App() {
             await new Promise(r => setTimeout(r, 200));
 
             if (res.data.duplicates && res.data.duplicates.length > 0) {
-                setDuplicatePairs(res.data.duplicates);
-                setCurrentPairIndex(-1); // Show result screen first
+                setDuplicateGroups(res.data.duplicates);
             } else {
                 showMessage('info', `重複は見つかりませんでした。`);
             }
@@ -167,10 +163,24 @@ export default function App() {
         }
     };
 
+    const handleSaveSettings = async (folder: string, count: number) => {
+        try {
+            await axios.post(`${API_BASE}/api/settings/save`, {
+                target_folder: folder,
+                workers: count
+            });
+        } catch (error) {
+            console.error('Failed to save settings:', error);
+        }
+    };
+
     const handleBrowseTarget = async () => {
         try {
             const res = await axios.get(`${API_BASE}/api/settings/browse?initial_dir=${encodeURIComponent(targetFolder)}`);
-            if (res.data.path) setTargetFolder(res.data.path);
+            if (res.data.path) {
+                setTargetFolder(res.data.path);
+                handleSaveSettings(res.data.path, workers);
+            }
         } catch (error) {
             showMessage('error', 'フォルダ選択ダイアログを開けませんでした。');
         }
@@ -188,24 +198,22 @@ export default function App() {
         }
     };
 
-    const handleDeleteDuplicate = async (side: 'left' | 'right') => {
-        const pair = duplicatePairs[currentPairIndex];
-        const pathToDelete = side === 'left' ? pair.left : pair.right;
+    const handleDeleteImage = async (path: string) => {
         try {
-            await axios.post(`${API_BASE}/api/duplicates/delete`, { path: pathToDelete });
-            handleNextPair();
+            await axios.post(`${API_BASE}/api/duplicates/delete`, { path });
+            // UIから削除
+            const newGroups = duplicateGroups.map(group => ({
+                ...group,
+                images: group.images.filter((img: any) => img.path !== path)
+            })).filter(group => group.images.length > 1); // 1枚になったらグループ削除
+
+            setDuplicateGroups(newGroups);
+
+            if (newGroups.length === 0) {
+                showMessage('success', '全ての重複処理が完了しました。');
+            }
         } catch (error) {
             showMessage('error', '削除に失敗しました。');
-        }
-    };
-
-    const handleNextPair = () => {
-        if (currentPairIndex < duplicatePairs.length - 1) {
-            setCurrentPairIndex(prev => prev + 1);
-        } else {
-            setCurrentPairIndex(-1);
-            setDuplicatePairs([]);
-            showMessage('success', '全ての重複処理が完了しました。');
         }
     };
 
@@ -245,13 +253,13 @@ export default function App() {
                 </div>
 
                 <nav className="flex-1 space-y-3">
-                    <SidebarItem icon={HomeIcon} label="ホーム" active={activeTab === 'home'} onClick={() => setActiveTab('home')} />
-                    <SidebarItem icon={CopyIcon} label="重複削除" active={activeTab === 'duplicates'} onClick={() => setActiveTab('duplicates')} />
-                    <SidebarItem icon={CloudSunIcon} label="季節分類" active={activeTab === 'seasons'} onClick={() => setActiveTab('seasons')} />
+                    <SidebarItem icon={HomeIcon} label="Home" active={activeTab === 'home'} onClick={() => setActiveTab('home')} />
+                    <SidebarItem icon={CopyIcon} label="Duplicate Finder" active={activeTab === 'duplicates'} onClick={() => setActiveTab('duplicates')} />
+                    <SidebarItem icon={CloudSunIcon} label="AI Season Classifier" active={activeTab === 'seasons'} onClick={() => setActiveTab('seasons')} />
                 </nav>
 
-                <div className="pt-8 border-t border-white/10">
-                    <SidebarItem icon={SettingsIcon} label="設定" active={activeTab === 'settings'} onClick={() => setActiveTab('settings')} />
+                <div className="pt-6 border-t border-white/10">
+                    <SidebarItem icon={SettingsIcon} label="Settings" active={activeTab === 'settings'} onClick={() => setActiveTab('settings')} />
                 </div>
             </aside>
 
@@ -269,14 +277,11 @@ export default function App() {
                         <DuplicateFinder
                             scanning={scanning}
                             progress={progress}
-                            duplicatePairs={duplicatePairs}
-                            currentPairIndex={currentPairIndex}
+                            duplicateGroups={duplicateGroups}
                             targetFolder={targetFolder}
                             workers={workers}
                             onRunScan={runDuplicateScan}
-                            onDelete={handleDeleteDuplicate}
-                            onNextPair={handleNextPair}
-                            onResetIndex={() => setCurrentPairIndex(-1)}
+                            onDelete={handleDeleteImage}
                         />
                     )}
 
@@ -304,10 +309,16 @@ export default function App() {
                             workers={workers}
                             maxCores={maxCores}
                             deviceInfo={deviceInfo}
-                            onTargetFolderChange={setTargetFolder}
+                            onTargetFolderChange={(val) => {
+                                setTargetFolder(val);
+                                handleSaveSettings(val, workers);
+                            }}
                             onOutputFolderChange={setOutputFolder}
                             onUseCustomOutputChange={setUseCustomOutput}
-                            onWorkersChange={setWorkers}
+                            onWorkersChange={(val) => {
+                                setWorkers(val);
+                                handleSaveSettings(targetFolder, val);
+                            }}
                             onBrowseTarget={handleBrowseTarget}
                             onBrowseOutput={handleBrowseOutput}
                         />

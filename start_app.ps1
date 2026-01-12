@@ -6,15 +6,15 @@ function Stop-All {
     if ($frontend) { Stop-Process -Id $frontend.Id -Force }
     
     # Double check ports
-    Get-NetTCPConnection -LocalPort 8000 | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }
-    Get-NetTCPConnection -LocalPort 5173 | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }
+    Get-NetTCPConnection -LocalPort 8000 -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }
+    Get-NetTCPConnection -LocalPort 5173 -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }
     Write-Host "[Done] All processes stopped." -ForegroundColor Green
 }
 
 # Cleanup first
 Write-Host "[Wallpaper Management] Cleaning up ports..." -ForegroundColor Cyan
-Get-NetTCPConnection -LocalPort 8000 | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }
-Get-NetTCPConnection -LocalPort 5173 | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }
+Get-NetTCPConnection -LocalPort 8000 -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }
+Get-NetTCPConnection -LocalPort 5173 -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }
 
 Write-Host "[Wallpaper Management] Starting servers..." -ForegroundColor Cyan
 Write-Host "NOTE: Press Ctrl+C once to stop everything." -ForegroundColor Gray
@@ -34,7 +34,7 @@ if ($backend.HasExited) {
 # Start Frontend
 Write-Host "Starting frontend..." -ForegroundColor Gray
 cd frontend
-# Use 'cmd /c' to ensure npm runs correctly and opens the browser
+# Use 'cmd /c' to ensure npm runs correctly on Windows
 $frontend = Start-Process cmd -ArgumentList "/c npm run dev -- --host --port 5173 --open" -NoNewWindow -PassThru
 cd ..
 

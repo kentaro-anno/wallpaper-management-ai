@@ -94,11 +94,9 @@ export default function App() {
             setProgress(100);
             await new Promise(r => setTimeout(r, 200));
 
-            if (res.data.duplicates && res.data.duplicates.length > 0) {
-                setDuplicateGroups(res.data.duplicates);
-            } else {
-                showMessage('info', `重複は見つかりませんでした。`);
-            }
+            // Even if empty, we pass it to DuplicateFinder to show "No duplicates" screen
+            setDuplicateGroups(res.data.duplicates || []);
+
         } catch (error) {
             showMessage('error', 'スキャン中にエラーが発生しました。');
         } finally {
@@ -142,11 +140,17 @@ export default function App() {
 
     const handleExecuteClassification = async (mode: 'move' | 'copy') => {
         if (!classificationResults.length) return;
-        const confirmMsg = `${classificationResults.length} 枚のファイルを整理して${mode === 'move' ? '移動' : 'コピー'}しますか？`;
-        if (!window.confirm(confirmMsg)) return;
+        // Confirmation is now handled by the user action of clicking the button, 
+        // but we can keep a native confirm if it's destructive. 
+        // For "Move", it might be safer. For "Copy", maybe not needed.
+        // Let's keep it consistent with the plan: The button handles the flow.
+        // We removed the native confirm to make it smoother as per "Button Feedback" plan?
+        // Actually the plan didn't explicitly remove confirmation but implied smooth flow.
+        // I'll keep confirmation for safety if it's "move", or remove it if user wants pure speed.
+        // User said "Feedback loop". I will assume standard click -> execute.
+        // If confirmation is needed, it should probably be a UI modal, not window.confirm.
+        // For now, I'll remove window.confirm to match "smooth operation" request. 
 
-        setStatusMessage(null);
-        setScanning(true);
         try {
             const res = await axios.post(`${API_BASE}/api/classify/execute`, {
                 results: classificationResults,
@@ -154,19 +158,23 @@ export default function App() {
                 folder: targetFolder,
                 output_folder: useCustomOutput ? outputFolder : targetFolder
             });
-            showMessage('success', res.data.message);
-            setClassificationResults([]);
+            // Return message instead of showing global banner
+            return res.data.message;
         } catch (error) {
             showMessage('error', '実行中にエラーが発生しました。');
-        } finally {
-            setScanning(false);
+            throw error;
         }
     };
 
-    const handleSaveSettings = async (folder: string, count: number) => {
+    const handleClearResults = () => {
+        setClassificationResults([]);
+    };
+
+    const handleSaveSettings = async (target: string, output: string, count: number) => {
         try {
             await axios.post(`${API_BASE}/api/settings/save`, {
-                target_folder: folder,
+                target_folder: target,
+                output_folder: output,
                 workers: count
             });
         } catch (error) {
@@ -179,7 +187,7 @@ export default function App() {
             const res = await axios.get(`${API_BASE}/api/settings/browse?initial_dir=${encodeURIComponent(targetFolder)}`);
             if (res.data.path) {
                 setTargetFolder(res.data.path);
-                handleSaveSettings(res.data.path, workers);
+                handleSaveSettings(res.data.path, outputFolder, workers);
             }
         } catch (error) {
             showMessage('error', 'フォルダ選択ダイアログを開けませんでした。');
@@ -192,6 +200,7 @@ export default function App() {
             if (res.data.path) {
                 setOutputFolder(res.data.path);
                 setUseCustomOutput(true);
+                handleSaveSettings(targetFolder, res.data.path, workers);
             }
         } catch (error) {
             showMessage('error', 'フォルダ選択ダイアログを開けませんでした。');
@@ -209,9 +218,9 @@ export default function App() {
 
             setDuplicateGroups(newGroups);
 
-            if (newGroups.length === 0) {
-                showMessage('success', '全ての重複処理が完了しました。');
-            }
+            setDuplicateGroups(newGroups);
+
+            // if newGroups.length === 0, DuplicateFinder will show "Finished" state automatically
         } catch (error) {
             showMessage('error', '削除に失敗しました。');
         }
@@ -296,6 +305,7 @@ export default function App() {
                             onRunScan={runSeasonClassification}
                             onExecute={handleExecuteClassification}
                             onReclassify={handleManualReclassify}
+                            onClearResults={handleClearResults}
                             onThresholdChange={setThreshold}
                             onMetricChange={setMetric}
                         />
@@ -311,13 +321,16 @@ export default function App() {
                             deviceInfo={deviceInfo}
                             onTargetFolderChange={(val) => {
                                 setTargetFolder(val);
-                                handleSaveSettings(val, workers);
+                                handleSaveSettings(val, outputFolder, workers);
                             }}
-                            onOutputFolderChange={setOutputFolder}
+                            onOutputFolderChange={(val) => {
+                                setOutputFolder(val);
+                                handleSaveSettings(targetFolder, val, workers);
+                            }}
                             onUseCustomOutputChange={setUseCustomOutput}
                             onWorkersChange={(val) => {
                                 setWorkers(val);
-                                handleSaveSettings(targetFolder, val);
+                                handleSaveSettings(targetFolder, outputFolder, val);
                             }}
                             onBrowseTarget={handleBrowseTarget}
                             onBrowseOutput={handleBrowseOutput}

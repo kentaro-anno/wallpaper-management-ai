@@ -1,5 +1,6 @@
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Copy, Trash2, AlertCircle } from 'lucide-react';
+import { Copy, Trash2, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { API_BASE } from '../../constants';
 import { GlassCard } from '../../components/common/GlassCard';
 
@@ -21,6 +22,31 @@ export const DuplicateFinder = ({
     onRunScan,
     onDelete
 }: DuplicateFinderProps) => {
+    // Track if we should show the "No duplicates" success card
+    // It should show if we finished a scan with 0 results, or if we deleted all duplicates.
+    // It should NOT show on initial mount.
+    const [showSuccess, setShowSuccess] = useState(false);
+    const [hasscanned, setHasScanned] = useState(false);
+
+    useEffect(() => {
+        if (scanning) {
+            setShowSuccess(false);
+            setHasScanned(true);
+        }
+    }, [scanning]);
+
+    useEffect(() => {
+        // If we have scanned at least once, and groups become empty, show success
+        if (hasscanned && !scanning && duplicateGroups.length === 0) {
+            setShowSuccess(true);
+        }
+    }, [duplicateGroups, scanning, hasscanned]);
+
+    const handleReset = () => {
+        setShowSuccess(false);
+        setHasScanned(false); // Reset to true initial state
+    };
+
     return (
         <motion.div
             key="duplicates"
@@ -45,6 +71,7 @@ export const DuplicateFinder = ({
             <AnimatePresence mode="wait">
                 {scanning ? (
                     <motion.div
+                        key="scanning"
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: -20 }}
@@ -58,6 +85,31 @@ export const DuplicateFinder = ({
                             />
                         </div>
                         <p className="animate-pulse text-primary font-bold">Scanning... {progress}%</p>
+                    </motion.div>
+                ) : showSuccess ? (
+                    <motion.div
+                        initial={{ opacity: 0, scale: 0.9 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.9 }}
+                        key="success"
+                        className="glass-card p-16 text-center space-y-8 rounded-[3rem] border border-emerald-500/20 bg-emerald-500/5"
+                    >
+                        <div className="w-24 h-24 rounded-full bg-emerald-500/10 flex items-center justify-center text-emerald-400 mx-auto">
+                            <CheckCircle2 size={48} />
+                        </div>
+                        <div className="space-y-4">
+                            <h3 className="text-2xl font-bold text-emerald-400">All Clear!</h3>
+                            <p className="text-muted-foreground">
+                                重複画像は見つかりませんでした。<br />
+                                ライブラリは整理されています。
+                            </p>
+                        </div>
+                        <button
+                            onClick={handleReset}
+                            className="px-12 py-4 bg-white/5 hover:bg-emerald-500/20 border border-white/10 hover:border-emerald-500/30 rounded-[2rem] font-bold text-lg transition-all"
+                        >
+                            OK
+                        </button>
                     </motion.div>
                 ) : duplicateGroups.length === 0 ? (
                     <motion.div

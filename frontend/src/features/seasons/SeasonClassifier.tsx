@@ -1,5 +1,6 @@
-import { motion } from 'framer-motion';
-import { CloudSun } from 'lucide-react';
+import { useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { CloudSun, Loader2, CheckCircle2 } from 'lucide-react';
 import { API_BASE } from '../../constants';
 
 interface SeasonClassifierProps {
@@ -10,7 +11,8 @@ interface SeasonClassifierProps {
     metric: string;
     metricLabels: any;
     onRunScan: () => void;
-    onExecute: (mode: 'move' | 'copy') => void;
+    onExecute: (mode: 'move' | 'copy') => Promise<string>;
+    onClearResults: () => void;
     onReclassify: (index: number, newSeason: string) => void;
     onThresholdChange: (value: number) => void;
     onMetricChange: (value: string) => void;
@@ -25,10 +27,32 @@ export const SeasonClassifier = ({
     metricLabels,
     onRunScan,
     onExecute,
+    onClearResults,
     onReclassify,
     onThresholdChange,
     onMetricChange
 }: SeasonClassifierProps) => {
+    const [executionState, setExecutionState] = useState<{ mode: 'move' | 'copy' | null; status: 'idle' | 'executing' | 'success' }>({ mode: null, status: 'idle' });
+    const [successMessage, setSuccessMessage] = useState('');
+
+    const handleExecute = async (mode: 'move' | 'copy') => {
+        setExecutionState({ mode, status: 'executing' });
+        try {
+            const msg = await onExecute(mode);
+            setSuccessMessage(msg);
+            setExecutionState({ mode, status: 'success' });
+
+            // Wait 3 seconds then clear results to return to initial screen
+            setTimeout(() => {
+                setExecutionState({ mode: null, status: 'idle' });
+                setSuccessMessage('');
+                onClearResults();
+            }, 3000);
+        } catch (error) {
+            setExecutionState({ mode: null, status: 'idle' });
+        }
+    };
+
     return (
         <motion.div
             key="seasons"
@@ -113,19 +137,56 @@ export const SeasonClassifier = ({
                                             <p className="text-sm font-bold mb-1">整理の実行</p>
                                             <p className="text-xs text-muted-foreground">結果フォルダへ移動/コピーします。</p>
                                         </div>
+
+                                        {/* Copy Button */}
                                         <button
-                                            onClick={() => onExecute('copy')}
-                                            className="px-6 py-2 bg-white/5 hover:bg-white/10 rounded-xl text-sm font-bold border border-white/10"
+                                            onClick={() => handleExecute('copy')}
+                                            disabled={executionState.status !== 'idle'}
+                                            className={`px-6 py-2 rounded-xl text-sm font-bold border transition-all duration-300 min-w-[120px] flex items-center justify-center space-x-2
+                                                ${executionState.mode === 'copy' && executionState.status === 'success'
+                                                    ? 'bg-emerald-500/20 border-emerald-500 text-emerald-400'
+                                                    : 'bg-white/5 hover:bg-white/10 border-white/10'}`}
                                         >
-                                            コピー整理
+                                            {executionState.mode === 'copy' ? (
+                                                executionState.status === 'executing' ? <Loader2 className="animate-spin" size={16} /> :
+                                                    executionState.status === 'success' ? <><CheckCircle2 size={16} /><span>完了</span></> :
+                                                        <span>コピー整理</span>
+                                            ) : (
+                                                <span>コピー整理</span>
+                                            )}
                                         </button>
+
+                                        {/* Move Button */}
                                         <button
-                                            onClick={() => onExecute('move')}
-                                            className="px-6 py-2 bg-purple-600 hover:bg-purple-500 rounded-xl text-sm font-bold shadow-lg shadow-purple-600/20"
+                                            onClick={() => handleExecute('move')}
+                                            disabled={executionState.status !== 'idle'}
+                                            className={`px-6 py-2 rounded-xl text-sm font-bold shadow-lg transition-all duration-300 min-w-[120px] flex items-center justify-center space-x-2
+                                                ${executionState.mode === 'move' && executionState.status === 'success'
+                                                    ? 'bg-emerald-500 border border-emerald-400 text-white shadow-emerald-500/20'
+                                                    : 'bg-purple-600 hover:bg-purple-500 shadow-purple-600/20'}`}
                                         >
-                                            移動整理
+                                            {executionState.mode === 'move' ? (
+                                                executionState.status === 'executing' ? <Loader2 className="animate-spin" size={16} /> :
+                                                    executionState.status === 'success' ? <><CheckCircle2 size={16} /><span>完了</span></> :
+                                                        <span>移動整理</span>
+                                            ) : (
+                                                <span>移動整理</span>
+                                            )}
                                         </button>
                                     </div>
+
+                                    <AnimatePresence>
+                                        {successMessage && (
+                                            <motion.div
+                                                initial={{ opacity: 0, height: 0 }}
+                                                animate={{ opacity: 1, height: 'auto' }}
+                                                exit={{ opacity: 0, height: 0 }}
+                                                className="text-center text-emerald-400 text-sm font-bold"
+                                            >
+                                                {successMessage}
+                                            </motion.div>
+                                        )}
+                                    </AnimatePresence>
 
                                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
                                         {classificationResults.map((r, i) => {

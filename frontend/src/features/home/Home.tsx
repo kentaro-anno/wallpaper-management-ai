@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { Copy, CloudSun, ChevronRight } from 'lucide-react';
+import { Copy, CloudSun, ChevronRight, Image as ImageIcon } from 'lucide-react';
 import { GlassCard } from '../../components/common/GlassCard';
 
 interface HomeProps {
@@ -15,7 +15,28 @@ export const Home = ({ onTabChange }: HomeProps) => {
             exit={{ opacity: 0, y: -30 }}
             className="max-w-6xl mx-auto space-y-12 h-full flex flex-col justify-center pb-24"
         >
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-10 max-w-5xl mx-auto w-full">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 max-w-7xl mx-auto w-full px-4">
+                
+                <GlassCard
+                    onClick={() => onTabChange('browser')}
+                    className="min-h-[350px] flex flex-col justify-end group cursor-pointer hover:border-blue-500/50 relative overflow-hidden"
+                >
+                    <div className="absolute top-[-20px] right-[-20px] p-8 text-white/5 group-hover:text-blue-500/10 transition-all duration-700">
+                        <ImageIcon size={240} />
+                    </div>
+                    <div className="relative z-10">
+                        <div className="w-12 h-12 rounded-xl bg-blue-500/10 flex items-center justify-center text-blue-500 mb-6 group-hover:scale-110 transition-transform">
+                            <ImageIcon size={24} />
+                        </div>
+                        <h3 className="text-3xl font-black mb-4 flex items-center">
+                            Image Browser <ChevronRight className="ml-3 group-hover:translate-x-2 transition-transform text-blue-500" />
+                        </h3>
+                        <p className="text-muted-foreground text-lg leading-relaxed">
+                            ターゲットフォルダ内の画像を快適に閲覧・拡大表示します。
+                        </p>
+                    </div>
+                </GlassCard>
+
                 <GlassCard
                     onClick={() => onTabChange('duplicates')}
                     className="min-h-[350px] flex flex-col justify-end group cursor-pointer hover:border-primary/50 relative overflow-hidden"

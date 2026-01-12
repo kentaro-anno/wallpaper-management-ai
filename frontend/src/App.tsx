@@ -18,6 +18,7 @@ import { Home } from './features/home/Home';
 import { DuplicateFinder } from './features/duplicates/DuplicateFinder';
 import { SeasonClassifier } from './features/seasons/SeasonClassifier';
 import { Settings } from './features/settings/Settings';
+import { ImageBrowser } from './features/browser/ImageBrowser';
 
 import { API_BASE } from './constants';
 
@@ -263,6 +264,7 @@ export default function App() {
 
                 <nav className="flex-1 space-y-3">
                     <SidebarItem icon={HomeIcon} label="Home" active={activeTab === 'home'} onClick={() => setActiveTab('home')} />
+                    <SidebarItem icon={ImageIcon} label="Image Browser" active={activeTab === 'browser'} onClick={() => setActiveTab('browser')} />
                     <SidebarItem icon={CopyIcon} label="Duplicate Finder" active={activeTab === 'duplicates'} onClick={() => setActiveTab('duplicates')} />
                     <SidebarItem icon={CloudSunIcon} label="AI Season Classifier" active={activeTab === 'seasons'} onClick={() => setActiveTab('seasons')} />
                 </nav>
@@ -309,6 +311,10 @@ export default function App() {
                             onThresholdChange={setThreshold}
                             onMetricChange={setMetric}
                         />
+                    )}
+
+                    {activeTab === 'browser' && (
+                        <ImageBrowser targetFolder={targetFolder} />
                     )}
 
                     {activeTab === 'settings' && (

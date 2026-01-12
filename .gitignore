@@ -22,13 +22,8 @@ Thumbs.db
 desktop.ini
 
 # Project Data (Excluding image samples/data)
-Bing/
-Windows Spotlight/
-ロウソク/
-宇宙/
-植物/
-風景/
 mv_wallpaper.exe
+future_additions.md
 
 # Environment
 .env

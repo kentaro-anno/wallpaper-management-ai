@@ -1,87 +1,66 @@
 import { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { AnimatePresence } from 'framer-motion';
 import axios from 'axios';
 import {
-    Home,
-    Copy,
-    CloudSun,
-    Settings,
-    ChevronRight,
+    Home as HomeIcon,
+    Copy as CopyIcon,
+    CloudSun as CloudSunIcon,
+    Settings as SettingsIcon,
     Image as ImageIcon,
-    CheckCircle2,
-    FolderOpen,
-    X,
-    Cpu,
-    AlertCircle,
-    Info
 } from 'lucide-react';
 
-const API_BASE = 'http://localhost:8000';
+// Common Components
+import { SidebarItem } from './components/common/SidebarItem';
+import { StatusMessage } from './components/common/StatusMessage';
 
-// --- Components ---
+// Features
+import { Home } from './features/home/Home';
+import { DuplicateFinder } from './features/duplicates/DuplicateFinder';
+import { SeasonClassifier } from './features/seasons/SeasonClassifier';
+import { Settings } from './features/settings/Settings';
 
-const SidebarItem = ({ icon: Icon, label, active, onClick }: any) => (
-    <button
-        onClick={onClick}
-        className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-300 ${active
-            ? 'bg-primary/20 text-primary border border-primary/20'
-            : 'text-muted-foreground hover:bg-white/5 hover:text-foreground'
-            }`}
-    >
-        <Icon size={20} />
-        <span className="font-medium">{label}</span>
-    </button>
-);
-
-const GlassCard = ({ children, className = "", onClick }: any) => (
-    <div
-        onClick={onClick}
-        className={`glass-card p-6 rounded-2xl border border-white/5 bg-white/5 backdrop-blur-md transition-all duration-300 ${className}`}
-    >
-        {children}
-    </div>
-);
-
-// --- Main App ---
+import { API_BASE } from './constants';
 
 export default function App() {
     const [activeTab, setActiveTab] = useState('home');
     const [scanning, setScanning] = useState(false);
     const [progress, setProgress] = useState(0);
-    const [targetFolder, setTargetFolder] = useState(() => {
-        return localStorage.getItem('targetFolder') || '';
-    });
-    const [outputFolder, setOutputFolder] = useState(() => {
-        return localStorage.getItem('outputFolder') || '';
-    });
-    const [useCustomOutput, setUseCustomOutput] = useState(() => {
-        return localStorage.getItem('useCustomOutput') === 'true';
-    });
-    const [duplicatePairs, setDuplicatePairs] = useState<any[]>([]);
-    const [currentPairIndex, setCurrentPairIndex] = useState(-1);
-    const [classificationResults, setClassificationResults] = useState<any[]>([]);
-    const [threshold, setThreshold] = useState(0.5);
-    const [metric, setMetric] = useState('probability'); // probability, margin, entropy
-    const [workers, setWorkers] = useState(4);
-    const [maxCores, setMaxCores] = useState(4);
     const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error' | 'info', text: string } | null>(null);
 
-    // フォルダパスが変更されたら保存
+    // Settings State
+    const [targetFolder, setTargetFolder] = useState(() => localStorage.getItem('targetFolder') || '');
+    const [outputFolder, setOutputFolder] = useState(() => localStorage.getItem('outputFolder') || '');
+    const [useCustomOutput, setUseCustomOutput] = useState(() => localStorage.getItem('useCustomOutput') === 'true');
+    const [workers, setWorkers] = useState(() => parseInt(localStorage.getItem('workers') || '4'));
+    const [maxCores, setMaxCores] = useState(4);
+    const [deviceInfo, setDeviceInfo] = useState('CPU');
+
+    // Duplicate State
+    const [duplicatePairs, setDuplicatePairs] = useState<any[]>([]);
+    const [currentPairIndex, setCurrentPairIndex] = useState(-1);
+
+    // Season State
+    const [classificationResults, setClassificationResults] = useState<any[]>([]);
+    const [threshold, setThreshold] = useState(0.5);
+    const [metric, setMetric] = useState('probability');
+
+    // Persistence
     useEffect(() => {
         localStorage.setItem('targetFolder', targetFolder);
         localStorage.setItem('outputFolder', outputFolder);
         localStorage.setItem('useCustomOutput', String(useCustomOutput));
-    }, [targetFolder, outputFolder, useCustomOutput]);
+        localStorage.setItem('workers', String(workers));
+    }, [targetFolder, outputFolder, useCustomOutput, workers]);
 
     useEffect(() => {
         fetchSystemInfo();
-    }, [targetFolder]);
+    }, []);
 
     const fetchSystemInfo = async () => {
         try {
             const res = await axios.get(`${API_BASE}/api/system/info`);
             setMaxCores(res.data.cpu_count);
-            // 推論として CPUコア数の 75% をデフォルトに設定（既保存がなければ）
+            setDeviceInfo(res.data.device.toUpperCase());
             if (!localStorage.getItem('workers')) {
                 setWorkers(Math.max(1, Math.floor(res.data.cpu_count * 0.75)));
             }
@@ -90,23 +69,11 @@ export default function App() {
         }
     };
 
-    useEffect(() => {
-        fetchSystemInfo();
-        // Removed fetchStats and its interval
-    }, [targetFolder]);
-
-    useEffect(() => {
-        const savedWorkers = localStorage.getItem('workers');
-        if (savedWorkers) setWorkers(parseInt(savedWorkers));
-    }, []);
-
-    useEffect(() => {
-        localStorage.setItem('workers', String(workers));
-    }, [workers]);
-
     const showMessage = (type: 'success' | 'error' | 'info', text: string) => {
         setStatusMessage({ type, text });
     };
+
+    // --- Actions ---
 
     const runDuplicateScan = async () => {
         setStatusMessage(null);
@@ -124,7 +91,6 @@ export default function App() {
 
             clearInterval(progressTimer);
             setProgress(100);
-
             await new Promise(r => setTimeout(r, 200));
 
             if (res.data.duplicates && res.data.duplicates.length > 0) {
@@ -160,7 +126,6 @@ export default function App() {
 
             clearInterval(progressTimer);
             setProgress(100);
-
             await new Promise(r => setTimeout(r, 200));
 
             if (res.data.results && res.data.results.length > 0) {
@@ -200,12 +165,10 @@ export default function App() {
         }
     };
 
-    const handleBrowse = async () => {
+    const handleBrowseTarget = async () => {
         try {
             const res = await axios.get(`${API_BASE}/api/settings/browse?initial_dir=${encodeURIComponent(targetFolder)}`);
-            if (res.data.path) {
-                setTargetFolder(res.data.path);
-            }
+            if (res.data.path) setTargetFolder(res.data.path);
         } catch (error) {
             showMessage('error', 'フォルダ選択ダイアログを開けませんでした。');
         }
@@ -223,7 +186,7 @@ export default function App() {
         }
     };
 
-    const handleDelete = async (side: 'left' | 'right') => {
+    const handleDeleteDuplicate = async (side: 'left' | 'right') => {
         const pair = duplicatePairs[currentPairIndex];
         const pathToDelete = side === 'left' ? pair.left : pair.right;
         try {
@@ -280,321 +243,72 @@ export default function App() {
                 </div>
 
                 <nav className="flex-1 space-y-3">
-                    <SidebarItem icon={Home} label="ホーム" active={activeTab === 'home'} onClick={() => setActiveTab('home')} />
-                    <SidebarItem icon={Copy} label="重複削除" active={activeTab === 'duplicates'} onClick={() => setActiveTab('duplicates')} />
-                    <SidebarItem icon={CloudSun} label="季節分類" active={activeTab === 'seasons'} onClick={() => setActiveTab('seasons')} />
+                    <SidebarItem icon={HomeIcon} label="ホーム" active={activeTab === 'home'} onClick={() => setActiveTab('home')} />
+                    <SidebarItem icon={CopyIcon} label="重複削除" active={activeTab === 'duplicates'} onClick={() => setActiveTab('duplicates')} />
+                    <SidebarItem icon={CloudSunIcon} label="季節分類" active={activeTab === 'seasons'} onClick={() => setActiveTab('seasons')} />
                 </nav>
 
                 <div className="pt-8 border-t border-white/10">
-                    <SidebarItem icon={Settings} label="設定" active={activeTab === 'settings'} onClick={() => setActiveTab('settings')} />
+                    <SidebarItem icon={SettingsIcon} label="設定" active={activeTab === 'settings'} onClick={() => setActiveTab('settings')} />
                 </div>
             </aside>
 
             {/* Status Messages */}
-            <AnimatePresence>
-                {statusMessage && (
-                    <motion.div
-                        initial={{ opacity: 0, y: -20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, scale: 0.95 }}
-                        className={`fixed top-8 left-1/2 -translate-x-1/2 z-[100] px-6 py-4 rounded-2xl shadow-2xl backdrop-blur-xl border flex items-center space-x-3 
-                            ${statusMessage.type === 'success' ? 'bg-emerald-500/20 border-emerald-500/30 text-emerald-400' :
-                                statusMessage.type === 'error' ? 'bg-red-500/20 border-red-500/30 text-red-400' :
-                                    'bg-primary/20 border-primary/30 text-primary'}`}
-                    >
-                        {statusMessage.type === 'success' ? <CheckCircle2 size={20} /> :
-                            statusMessage.type === 'error' ? <AlertCircle size={20} /> : <Info size={20} />}
-                        <span className="font-bold pr-2">{statusMessage.text}</span>
-                        <button
-                            onClick={() => setStatusMessage(null)}
-                            className="p-1 hover:bg-white/10 rounded-full transition-colors ml-2 border-l border-white/10 pl-3"
-                        >
-                            <X size={16} />
-                        </button>
-                    </motion.div>
-                )}
-            </AnimatePresence>
+            <StatusMessage message={statusMessage} onClose={() => setStatusMessage(null)} />
 
             {/* Main Content */}
             <main className="flex-1 overflow-y-auto z-10 p-12">
                 <AnimatePresence mode="wait">
                     {activeTab === 'home' && (
-                        <motion.div key="home" initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -30 }} className="max-w-6xl mx-auto space-y-12 h-full flex flex-col justify-center pb-24">
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-10 max-w-5xl mx-auto w-full">
-                                <GlassCard onClick={() => setActiveTab('duplicates')} className="min-h-[350px] flex flex-col justify-end group cursor-pointer hover:border-primary/50 relative overflow-hidden">
-                                    <div className="absolute top-[-20px] right-[-20px] p-8 text-white/5 group-hover:text-primary/10 transition-all duration-700">
-                                        <Copy size={240} />
-                                    </div>
-                                    <div className="relative z-10">
-                                        <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center text-primary mb-6 group-hover:scale-110 transition-transform">
-                                            <Copy size={24} />
-                                        </div>
-                                        <h3 className="text-4xl font-black mb-4 flex items-center">Duplicate Finder <ChevronRight className="ml-3 group-hover:translate-x-2 transition-transform text-primary" /></h3>
-                                        <p className="text-muted-foreground text-lg leading-relaxed max-w-sm">視覚的に似ている画像を特定し、無駄なストレージ消費を抑えます。</p>
-                                    </div>
-                                </GlassCard>
-                                <GlassCard onClick={() => setActiveTab('seasons')} className="min-h-[350px] flex flex-col justify-end group cursor-pointer hover:border-purple-500/50 relative overflow-hidden">
-                                    <div className="absolute top-[-20px] right-[-20px] p-8 text-white/5 group-hover:text-purple-500/10 transition-all duration-700">
-                                        <CloudSun size={240} />
-                                    </div>
-                                    <div className="relative z-10">
-                                        <div className="w-12 h-12 rounded-xl bg-purple-500/10 flex items-center justify-center text-purple-500 mb-6 group-hover:scale-110 transition-transform">
-                                            <CloudSun size={24} />
-                                        </div>
-                                        <h3 className="text-4xl font-black mb-4 flex items-center">AI Season Classifier <ChevronRight className="ml-3 group-hover:translate-x-2 transition-transform text-purple-500" /></h3>
-                                        <p className="text-muted-foreground text-lg leading-relaxed max-w-sm">AI モデルを活用して風景を四季に自動分類。壁紙ライブラリを整理します。</p>
-                                    </div>
-                                </GlassCard>
-                            </div>
-                        </motion.div>
+                        <Home onTabChange={setActiveTab} />
                     )}
 
                     {activeTab === 'duplicates' && (
-                        <motion.div key="duplicates" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="max-w-4xl mx-auto py-12">
-                            <div className="text-center space-y-8">
-                                <h2 className="text-4xl font-bold">Duplicate Finder</h2>
-                                <div className="glass-card p-16 rounded-[3rem] space-y-10 border border-white/5">
-                                    {!scanning ? (
-                                        currentPairIndex === -1 ? (
-                                            <>
-                                                <div className="w-24 h-24 rounded-full bg-primary/10 flex items-center justify-center text-primary mx-auto"><Copy size={48} /></div>
-                                                <div className="space-y-4">
-                                                    <h3 className="text-2xl font-bold">スキャン準備完了</h3>
-                                                    <p className="text-muted-foreground">対象: {targetFolder}</p>
-                                                </div>
-                                                <button onClick={runDuplicateScan} className="px-12 py-5 bg-gradient-to-r from-primary to-purple-600 rounded-[2rem] font-black text-lg shadow-xl shadow-primary/20 hover:scale-105 transition-all">スキャン開始</button>
-                                            </>
-                                        ) : (
-                                            <div className="space-y-8 w-full text-left">
-                                                <div className="flex justify-between items-center bg-white/5 p-4 rounded-2xl">
-                                                    <span className="font-bold text-primary">Pair {currentPairIndex + 1} / {duplicatePairs.length}</span>
-                                                    <button onClick={() => setCurrentPairIndex(-1)} className="text-muted-foreground hover:text-white"><X size={20} /></button>
-                                                </div>
-                                                <div className="grid grid-cols-2 gap-6 h-[400px]">
-                                                    {[
-                                                        { side: 'left' as const, path: duplicatePairs[currentPairIndex].left, name: duplicatePairs[currentPairIndex].left_name },
-                                                        { side: 'right' as const, path: duplicatePairs[currentPairIndex].right, name: duplicatePairs[currentPairIndex].right_name }
-                                                    ].map((item) => (
-                                                        <div key={item.side} className="relative group rounded-2xl overflow-hidden border border-white/10 bg-black/40 flex flex-col">
-                                                            <div className="flex-1 overflow-hidden">
-                                                                <img src={`${API_BASE}/api/images/preview?path=${encodeURIComponent(item.path)}`} alt="" className="w-full h-full object-contain" />
-                                                            </div>
-                                                            <div className="p-4 bg-black/60">
-                                                                <p className="text-[10px] truncate mb-2 text-white/40" title={item.name}>{item.name}</p>
-                                                                <button onClick={() => handleDelete(item.side)} className="w-full py-2 bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white rounded-lg transition-all text-xs font-bold">削除する</button>
-                                                            </div>
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                                <div className="flex justify-center pt-4">
-                                                    <button onClick={handleNextPair} className="px-8 py-3 bg-white/5 hover:bg-white/10 rounded-xl font-bold transition-all">スキップして次へ</button>
-                                                </div>
-                                            </div>
-                                        )
-                                    ) : (
-                                        <div className="space-y-10 py-12">
-                                            <div className="w-full bg-white/5 rounded-full h-2 max-w-md mx-auto overflow-hidden">
-                                                <motion.div initial={{ width: 0 }} animate={{ width: `${progress}%` }} className="h-full bg-primary" />
-                                            </div>
-                                            <p className="animate-pulse text-primary font-bold">Scanning... {progress}%</p>
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                        </motion.div>
+                        <DuplicateFinder
+                            scanning={scanning}
+                            progress={progress}
+                            duplicatePairs={duplicatePairs}
+                            currentPairIndex={currentPairIndex}
+                            targetFolder={targetFolder}
+                            workers={workers}
+                            onRunScan={runDuplicateScan}
+                            onDelete={handleDeleteDuplicate}
+                            onNextPair={handleNextPair}
+                            onResetIndex={() => setCurrentPairIndex(-1)}
+                        />
                     )}
 
                     {activeTab === 'seasons' && (
-                        <motion.div key="seasons" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="max-w-4xl mx-auto py-12">
-                            <div className="text-center space-y-8">
-                                <h2 className="text-4xl font-bold">AI Season Classifier</h2>
-                                <div className="glass-card p-16 rounded-[3rem] border border-purple-500/20 space-y-10">
-                                    {!scanning ? (
-                                        <div className="space-y-10 w-full">
-                                            <div className="w-24 h-24 rounded-full bg-purple-500/10 flex items-center justify-center text-purple-400 mx-auto"><CloudSun size={48} /></div>
-                                            <div className="space-y-8">
-                                                <div className="space-y-4">
-                                                    <h3 className="text-2xl font-bold">AI 分類の準備</h3>
-                                                    <div className="grid grid-cols-3 gap-4 max-w-lg mx-auto">
-                                                        {Object.keys(metricLabels).map(m => (
-                                                            <button
-                                                                key={m}
-                                                                onClick={() => setMetric(m)}
-                                                                className={`p-3 rounded-xl border text-xs font-bold transition-all ${metric === m
-                                                                    ? 'bg-purple-600 border-purple-400 text-white shadow-lg shadow-purple-600/20'
-                                                                    : 'bg-white/5 border-white/10 text-white/40 hover:bg-white/10'
-                                                                    }`}
-                                                            >
-                                                                {metricLabels[m].label}
-                                                            </button>
-                                                        ))}
-                                                    </div>
-                                                    <p className="text-[10px] text-white/40 italic">{metricLabels[metric].desc}</p>
-                                                </div>
-
-                                                <div className="max-w-xs mx-auto space-y-3 bg-white/5 p-4 rounded-2xl border border-white/10 text-left">
-                                                    <div className="flex justify-between text-[10px] font-bold uppercase tracking-wider">
-                                                        <span>{metricLabels[metric].label}の閾値</span>
-                                                        <span className="text-purple-400">{Math.round(threshold * 100)}%</span>
-                                                    </div>
-                                                    <input type="range" min="0.0" max="1.0" step="0.01" value={threshold} onChange={(e) => setThreshold(parseFloat(e.target.value))} className="w-full accent-purple-500 cursor-pointer" />
-                                                </div>
-                                            </div>
-
-                                            <button onClick={runSeasonClassification} className="px-12 py-5 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-[2rem] font-black text-lg shadow-xl shadow-purple-500/20 hover:scale-105 transition-all">解析を実行</button>
-
-                                            {classificationResults.length > 0 && (
-                                                <div className="mt-12 text-left space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                                                    <div className="flex items-center justify-between border-b border-white/10 pb-4 text-left">
-                                                        <h4 className="text-2xl font-black bg-clip-text text-transparent bg-gradient-to-r from-purple-400 to-indigo-400">Analysis Summary</h4>
-                                                        <div className="flex space-x-2">
-                                                            {['Spring', 'Summer', 'Autumn', 'Winter', 'Unknown'].map(s => {
-                                                                const count = s === 'Unknown' ? classificationResults.filter(r => r.is_unknown).length : classificationResults.filter(r => !r.is_unknown && r.prediction.toLowerCase().includes(s.toLowerCase())).length;
-                                                                return <div key={s} className="px-3 py-1 bg-white/5 rounded-full text-[10px] font-bold border border-white/10">{s}: {count}</div>;
-                                                            })}
-                                                        </div>
-                                                    </div>
-
-                                                    <div className="flex space-x-4 bg-purple-500/5 p-6 rounded-3xl border border-purple-500/20 justify-center">
-                                                        <div className="flex-1">
-                                                            <p className="text-sm font-bold mb-1">整理の実行</p>
-                                                            <p className="text-xs text-muted-foreground">結果フォルダへ移動/コピーします。</p>
-                                                        </div>
-                                                        <button onClick={() => handleExecuteClassification('copy')} className="px-6 py-2 bg-white/5 hover:bg-white/10 rounded-xl text-sm font-bold border border-white/10">コピー整理</button>
-                                                        <button onClick={() => handleExecuteClassification('move')} className="px-6 py-2 bg-purple-600 hover:bg-purple-500 rounded-xl text-sm font-bold shadow-lg shadow-purple-600/20">移動整理</button>
-                                                    </div>
-
-                                                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
-                                                        {classificationResults.map((r, i) => {
-                                                            const season = r.is_unknown ? 'unknown' : r.prediction.split(' ').pop().toLowerCase();
-                                                            return (
-                                                                <div key={i} className="group relative">
-                                                                    <div className={`relative aspect-video rounded-xl border overflow-hidden transition-all ${r.is_unknown ? 'border-amber-500/50 bg-amber-500/5 shadow-lg shadow-amber-500/10' : 'border-purple-500/30'}`}>
-                                                                        <img src={`${API_BASE}/api/images/preview?path=${encodeURIComponent(r.path)}`} className={`w-full h-full object-cover ${r.is_unknown ? 'sepia-[0.3] opacity-70' : ''}`} alt="" />
-
-                                                                        {r.is_unknown && (
-                                                                            <div className="absolute top-2 right-2 bg-amber-500 text-black text-[8px] font-black px-1.5 py-0.5 rounded shadow-lg animate-bounce">
-                                                                                要確認
-                                                                            </div>
-                                                                        )}
-
-                                                                        <div className="absolute inset-x-0 bottom-0 p-2 bg-black/60 flex justify-between items-center">
-                                                                            <span className="text-[9px] font-bold uppercase">{season}</span>
-                                                                            <span className="text-[9px] text-white/40">
-                                                                                {(() => {
-                                                                                    const lastWord = r.prediction.split(' ').pop();
-                                                                                    const capitalized = lastWord.charAt(0).toUpperCase() + lastWord.slice(1);
-                                                                                    const prob = r.probs[capitalized] || r.probs[lastWord] || 0;
-                                                                                    return Math.round(prob * 100);
-                                                                                })()}%
-                                                                            </span>
-                                                                        </div>
-
-                                                                        {/* Hover Overlay for Reclassification */}
-                                                                        <div className="absolute inset-0 bg-black/90 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center p-2 space-y-2">
-                                                                            <p className="text-[10px] font-black text-amber-400 mb-1 tracking-tighter">季節を選択して確定</p>
-                                                                            <div className="grid grid-cols-2 gap-1.5 w-full">
-                                                                                {['spring', 'summer', 'autumn', 'winter'].map(s => (
-                                                                                    <button
-                                                                                        key={s}
-                                                                                        onClick={() => handleManualReclassify(i, s)}
-                                                                                        className="py-1.5 px-1 bg-white/5 hover:bg-purple-600 border border-white/10 rounded text-[9px] font-black transition-all transform hover:scale-105 active:scale-95"
-                                                                                    >
-                                                                                        {s.toUpperCase()}
-                                                                                    </button>
-                                                                                ))}
-                                                                            </div>
-                                                                        </div>
-                                                                    </div>
-                                                                </div>
-                                                            );
-                                                        })}
-                                                    </div>
-                                                </div>
-                                            )}
-                                        </div>
-                                    ) : (
-                                        <div className="space-y-10 py-12">
-                                            <div className="w-full bg-white/5 rounded-full h-2 max-w-md mx-auto overflow-hidden">
-                                                <motion.div animate={{ width: `${progress}%` }} className="h-full bg-purple-500" />
-                                            </div>
-                                            <p className="animate-pulse text-purple-400 font-bold">Classifying... {progress}%</p>
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                        </motion.div>
+                        <SeasonClassifier
+                            scanning={scanning}
+                            progress={progress}
+                            classificationResults={classificationResults}
+                            threshold={threshold}
+                            metric={metric}
+                            metricLabels={metricLabels}
+                            onRunScan={runSeasonClassification}
+                            onExecute={handleExecuteClassification}
+                            onReclassify={handleManualReclassify}
+                            onThresholdChange={setThreshold}
+                            onMetricChange={setMetric}
+                        />
                     )}
 
                     {activeTab === 'settings' && (
-                        <motion.div key="settings" initial={{ opacity: 0, x: 50 }} animate={{ opacity: 1, x: 0 }} className="max-w-4xl mx-auto space-y-12 py-8">
-                            <h2 className="text-4xl font-bold">Settings</h2>
-                            <GlassCard className="space-y-6">
-                                <div className="space-y-3">
-                                    <label className="text-sm font-bold text-white/50 flex items-center"><FolderOpen size={16} className="mr-2" /> 対象フォルダパス</label>
-                                    <div className="flex space-x-3">
-                                        <input type="text" value={targetFolder} onChange={(e) => setTargetFolder(e.target.value)} className="flex-1 bg-black/40 border border-white/10 rounded-xl px-4 py-3 font-mono text-sm" />
-                                        <button onClick={handleBrowse} className="px-6 py-3 bg-white/5 border border-white/10 rounded-xl hover:bg-white/10 transition-all font-bold">参照</button>
-                                    </div>
-                                </div>
-
-                                <div className="space-y-3 pt-6 border-t border-white/5">
-                                    <label className="text-sm font-bold text-white/50 flex items-center justify-between">
-                                        <div className="flex items-center">
-                                            <FolderOpen size={16} className="mr-2 text-purple-400" /> 分類結果の出力先
-                                        </div>
-                                        <div className="flex bg-black/60 p-1 rounded-lg border border-white/10 scale-90">
-                                            <button onClick={() => setUseCustomOutput(false)} className={`px-3 py-1 rounded-md text-[10px] font-bold transition-all ${!useCustomOutput ? 'bg-purple-600 text-white shadow-lg' : 'text-white/40 hover:text-white'}`}>対象と同じ</button>
-                                            <button onClick={() => setUseCustomOutput(true)} className={`px-3 py-1 rounded-md text-[10px] font-bold transition-all ${useCustomOutput ? 'bg-purple-600 text-white shadow-lg' : 'text-white/40 hover:text-white'}`}>別フォルダ</button>
-                                        </div>
-                                    </label>
-
-                                    {useCustomOutput ? (
-                                        <div className="flex space-x-3 animate-in fade-in slide-in-from-top-2 duration-300">
-                                            <input type="text" value={outputFolder} placeholder="出力先フォルダを指定してください" onChange={(e) => setOutputFolder(e.target.value)} className="flex-1 bg-black/40 border border-purple-500/30 rounded-xl px-4 py-3 font-mono text-sm focus:border-purple-500/60 outline-none" />
-                                            <button onClick={handleBrowseOutput} className="px-6 py-3 bg-purple-500/10 border border-purple-500/20 text-purple-400 rounded-xl hover:bg-purple-500/20 transition-all font-bold">参照</button>
-                                        </div>
-                                    ) : (
-                                        <div className="p-4 bg-white/5 rounded-xl border border-white/5 italic text-white/30 text-xs">
-                                            整理を実行すると、対象フォルダ内に spring, summer 等のフォルダを作成します。
-                                        </div>
-                                    )}
-                                </div>
-
-                                <div className="space-y-4 pt-6 border-t border-white/5">
-                                    <div className="flex justify-between items-center text-sm font-bold text-white/50">
-                                        <div className="flex items-center"><Cpu size={16} className="mr-2 text-primary" /> 並列作業数 (Workers)</div>
-                                        <div className="text-primary">{workers} <span className="text-[10px] text-white/30 ml-1">/ {maxCores}</span></div>
-                                    </div>
-                                    <input
-                                        type="range"
-                                        min="1"
-                                        max={maxCores}
-                                        value={workers}
-                                        onChange={(e) => setWorkers(parseInt(e.target.value))}
-                                        className="w-full accent-primary h-1.5 bg-white/5 rounded-lg appearance-none cursor-pointer"
-                                    />
-                                    <div className="text-[10px] text-white/30 flex justify-between">
-                                        <span>最小負荷 (1)</span>
-                                        <span className="text-primary/60">推奨: {Math.max(1, Math.floor(maxCores * 0.75))}</span>
-                                        <span>最大負荷 ({maxCores})</span>
-                                    </div>
-                                </div>
-                            </GlassCard>
-
-                            <GlassCard className="grid grid-cols-2 gap-8">
-                                <div className="space-y-2">
-                                    <h4 className="text-xs font-bold text-white/40 uppercase">CLIP Model</h4>
-                                    <p className="text-sm font-mono">clip-vit-base-patch32</p>
-                                    <div className="flex items-center space-x-2"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /><span className="text-[10px] text-emerald-400 font-bold uppercase">Ready</span></div>
-                                </div>
-                                <div className="space-y-2 border-l border-white/5 pl-8">
-                                    <h4 className="text-xs font-bold text-white/40 uppercase">Device</h4>
-                                    <p className="text-sm font-mono">NVIDIA CUDA</p>
-                                    <div className="text-[10px] font-mono text-white/20 uppercase tracking-widest">Optimized</div>
-                                </div>
-                            </GlassCard>
-                        </motion.div>
+                        <Settings
+                            targetFolder={targetFolder}
+                            outputFolder={outputFolder}
+                            useCustomOutput={useCustomOutput}
+                            workers={workers}
+                            maxCores={maxCores}
+                            deviceInfo={deviceInfo}
+                            onTargetFolderChange={setTargetFolder}
+                            onOutputFolderChange={setOutputFolder}
+                            onUseCustomOutputChange={setUseCustomOutput}
+                            onWorkersChange={setWorkers}
+                            onBrowseTarget={handleBrowseTarget}
+                            onBrowseOutput={handleBrowseOutput}
+                        />
                     )}
                 </AnimatePresence>
             </main>

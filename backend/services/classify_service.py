@@ -6,6 +6,7 @@ from transformers import CLIPProcessor, CLIPModel
 from typing import List, Dict, Optional
 import logging
 import gc
+import threading
 
 logger = logging.getLogger(__name__)
 
@@ -21,18 +22,20 @@ class ClassifyService:
         self.model = None
         self.processor = None
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.lock = threading.Lock()
         print(f"ClassifyService initialized with device: {self.device}")
 
     def load_model(self):
-        if self.model is None:
-            try:
-                print(f"Loading CLIP model into {self.device}...")
-                self.model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32").to(self.device)
-                self.processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32", use_fast=False)
-                print("Model loaded successfully.")
-            except Exception as e:
-                print(f"FAILED to load model: {e}")
-                raise e
+        with self.lock:
+            if self.model is None:
+                try:
+                    print(f"Loading CLIP model into {self.device}...")
+                    self.model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32").to(self.device)
+                    self.processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32", use_fast=False)
+                    print("Model loaded successfully.")
+                except Exception as e:
+                    print(f"FAILED to load model: {e}")
+                    raise e
 
     def calculate_uncertainty(self, probs):
         sorted_probs = np.sort(probs)[::-1]

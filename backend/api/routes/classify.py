@@ -28,8 +28,34 @@ class ExecuteRequest(BaseModel):
 @router.get("/preview")
 async def preview_image(path: str):
     """画像をプレビュー用に配信する"""
-    if not os.path.exists(path):
+    if not path or not os.path.exists(path):
         raise HTTPException(status_code=404, detail=f"File not found: {path}")
+    
+    # Path traversal check
+    try:
+        abs_path = os.path.abspath(path)
+        
+        # Get configured folder dynamically (to handle updates without restart)
+        configured_folder = os.getenv("WALLPAPER_TARGET_FOLDER", "")
+        
+        if not configured_folder:
+            # If no folder is configured, preview should be disabled for security
+            raise HTTPException(status_code=403, detail="Access denied: Target folder not configured")
+            
+        abs_root = os.path.abspath(configured_folder)
+        
+        # On Windows, paths on different drives raise ValueError in commonpath
+        try:
+            if os.path.commonpath([abs_path, abs_root]) != abs_root:
+                raise HTTPException(status_code=403, detail="Access denied: Path outside allowed folder")
+        except ValueError:
+            raise HTTPException(status_code=403, detail="Access denied: Path on different drive")
+                
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=500, detail=f"Security check failed: {str(e)}")
+
     return FileResponse(path)
 
 @router.post("/scan")
@@ -46,7 +72,10 @@ async def scan_seasons(request: ScanRequest):
         raise HTTPException(status_code=500, detail=f"Model load failed: {str(e)}")
     
     targets = filenames
-    loop = asyncio.get_event_loop()
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = asyncio.get_event_loop()
     
     async def process_batch(paths):
         tasks = [loop.run_in_executor(None, classify_service.analyze_image_sync, p) for p in paths]
